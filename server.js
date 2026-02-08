@@ -159,4 +159,87 @@ app.post("/v1/chat/completions", async (req, res) => {
 
               if (content) {
                 delta.content = reasoningOpen
-                  ? `</
+                  ? `</think>\n\n${content}`
+                  : content;
+                reasoningOpen = false;
+              }
+
+              delete delta.reasoning_content;
+            }
+
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+          } catch {
+            res.write(line + "\n\n");
+          }
+        }
+      });
+
+      response.data.on("end", () => res.end());
+      response.data.on("error", () => res.end());
+      return;
+    }
+
+    // ───────── Non-streaming ─────────
+    const openaiResponse = {
+      id: `chatcmpl-${Date.now()}`,
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model,
+      choices: response.data.choices.map((choice, index) => {
+        let content = choice.message?.content || "";
+
+        if (SHOW_REASONING && choice.message?.reasoning_content) {
+          content =
+            `<think>\n${choice.message.reasoning_content}\n</think>\n\n` +
+            content;
+        }
+
+        return {
+          index,
+          message: { role: "assistant", content },
+          finish_reason: choice.finish_reason
+        };
+      }),
+      usage: response.data.usage ?? {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0
+      }
+    };
+
+    res.json(openaiResponse);
+  } catch (error) {
+    console.error("Proxy error:", error?.message || error);
+
+    res.status(error?.response?.status || 500).json({
+      error: {
+        message: error?.message || "Internal server error",
+        type: "invalid_request_error",
+        code: error?.response?.status || 500
+      }
+    });
+  }
+});
+
+// ─────────────────────────────────────────────
+// Fallback
+// ─────────────────────────────────────────────
+app.all("*", (req, res) => {
+  res.status(404).json({
+    error: {
+      message: `Endpoint ${req.path} not found`,
+      type: "invalid_request_error",
+      code: 404
+    }
+  });
+});
+
+// ─────────────────────────────────────────────
+// 🚀 Start server (Railway REQUIRED bind)
+// ─────────────────────────────────────────────
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`OpenAI → NVIDIA NIM Proxy running on port ${PORT}`);
+  console.log(`Health check: /health`);
+  console.log(`Reasoning display: ${SHOW_REASONING ? "ON" : "OFF"}`);
+  console.log(`Thinking mode: ${ENABLE_THINKING_MODE ? "ON" : "OFF"}`);
+});
