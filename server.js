@@ -8,10 +8,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ─────────────────────────────────────────────
-// Middleware
+// Middleware (🚨 BODY LIMIT FIX FOR JANITOR AI)
 // ─────────────────────────────────────────────
 app.use(cors());
-app.use(express.json());
+
+// Janitor AI sends LARGE payloads (chat history, character data, etc)
+app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ limit: "25mb", extended: true }));
 
 // ─────────────────────────────────────────────
 // Configuration
@@ -60,7 +63,6 @@ app.get("/v1", (req, res) => {
     status: "ok"
   });
 });
-
 
 // ─────────────────────────────────────────────
 // OpenAI-compatible model list
@@ -125,6 +127,11 @@ app.post("/v1/chat/completions", async (req, res) => {
           Authorization: `Bearer ${NIM_API_KEY}`,
           "Content-Type": "application/json"
         },
+
+        // 🚨 REQUIRED FOR LARGE REQUESTS / RESPONSES
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+
         responseType: stream ? "stream" : "json"
       }
     );
