@@ -56,7 +56,7 @@ app.get("/health", (req, res) => {
   });
 });
 
-// OpenAI base compatibility endpoint (Janitor AI expects this)
+// OpenAI base compatibility endpoint
 app.get("/v1", (req, res) => {
   res.json({
     object: "api",
@@ -87,7 +87,6 @@ app.post("/v1/chat/completions", async (req, res) => {
 
     let nimModel = MODEL_MAPPING[model];
 
-    // Smart fallback if model not mapped
     if (!nimModel) {
       const modelLower = model?.toLowerCase?.() || "";
 
@@ -127,11 +126,8 @@ app.post("/v1/chat/completions", async (req, res) => {
           Authorization: `Bearer ${NIM_API_KEY}`,
           "Content-Type": "application/json"
         },
-
-        // 🚨 REQUIRED FOR LARGE REQUESTS / RESPONSES
         maxBodyLength: Infinity,
         maxContentLength: Infinity,
-
         responseType: stream ? "stream" : "json"
       }
     );
@@ -160,6 +156,12 @@ app.post("/v1/chat/completions", async (req, res) => {
 
           try {
             const data = JSON.parse(line.slice(6));
+
+            // ✅ CRITICAL FIX FOR CHUB
+            if (data.choices && data.choices[0] && !data.choices[0].delta) {
+              data.choices[0].delta = {};
+            }
+
             const delta = data.choices?.[0]?.delta;
 
             if (delta) {
@@ -251,7 +253,7 @@ app.all("*", (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// 🚀 Start server (Railway REQUIRED bind)
+// 🚀 Start server
 // ─────────────────────────────────────────────
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`OpenAI → NVIDIA NIM Proxy running on port ${PORT}`);
