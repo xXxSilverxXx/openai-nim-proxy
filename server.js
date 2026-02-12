@@ -87,6 +87,7 @@ app.post("/v1/chat/completions", async (req, res) => {
 
     let nimModel = MODEL_MAPPING[model];
 
+    // Smart fallback if model not mapped
     if (!nimModel) {
       const modelLower = model?.toLowerCase?.() || "";
 
@@ -107,11 +108,24 @@ app.post("/v1/chat/completions", async (req, res) => {
       }
     }
 
+    // 🔥 Enhanced verbosity bias (not restrictive)
+    const enhancedMessages = [
+      {
+        role: "system",
+        content:
+          "Respond with AT LEAST 3–4 well-developed paragraphs. You may write more if appropriate. Be descriptive and thorough, while avoiding repetition, looping, or unnecessary filler."
+      },
+      ...messages
+    ];
+
     const nimRequest = {
       model: nimModel,
-      messages,
-      temperature: temperature ?? 0.6,
-      max_tokens: max_tokens ?? 9024,
+      messages: enhancedMessages,
+      temperature: temperature ?? 0.7,
+      max_tokens: Math.max(max_tokens ?? 0, 1250), // minimum 1250, not capped
+      top_p: 0.95,
+      presence_penalty: 0.6,
+      frequency_penalty: 0.3,
       stream: !!stream,
       extra_body: ENABLE_THINKING_MODE
         ? { chat_template_kwargs: { thinking: true } }
@@ -157,7 +171,7 @@ app.post("/v1/chat/completions", async (req, res) => {
           try {
             const data = JSON.parse(line.slice(6));
 
-            // ✅ CRITICAL FIX FOR CHUB
+            // ✅ Ensure delta always exists (Chub stability fix)
             if (data.choices && data.choices[0] && !data.choices[0].delta) {
               data.choices[0].delta = {};
             }
