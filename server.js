@@ -86,25 +86,42 @@ app.post("/v1/chat/completions", async (req, res) => {
     const { model, messages, temperature, max_tokens, stream } = req.body;
 
     let nimModel = MODEL_MAPPING[model];
+    
+    // Smart fallback aligned with your actual NIM models
+if (!nimModel) {
+  const modelLower = model?.toLowerCase?.() || "";
 
-    // Smart fallback if model not mapped
-    if (!nimModel) {
-      const modelLower = model?.toLowerCase?.() || "";
-
-      if (
-        modelLower.includes("gpt-4") ||
-        modelLower.includes("claude-opus") ||
-        modelLower.includes("405b")
-      ) {
-        nimModel = "meta/llama-3.1-405b-instruct";
-      } else if (
-        modelLower.includes("claude") ||
-        modelLower.includes("gemini") ||
-        modelLower.includes("70b")
-      ) {
-        nimModel = "meta/llama-3.1-70b-instruct";
-      } else {
-        nimModel = "meta/llama-3.1-8b-instruct";
+  if (
+    modelLower.includes("gpt-4o") ||
+    modelLower.includes("deepseek") ||
+    modelLower.includes("best")
+  ) {
+    nimModel = "deepseek-ai/deepseek-v3.1"; // BEST slow burn
+  } 
+  else if (
+    modelLower.includes("gemini") ||
+    modelLower.includes("thinking") ||
+    modelLower.includes("advanced")
+  ) {
+    nimModel = "qwen/qwen3-next-80b-a3b-thinking"; // hesitation king
+  } 
+  else if (
+    modelLower.includes("turbo") ||
+    modelLower.includes("kimi")
+  ) {
+    nimModel = "moonshotai/kimi-k2-instruct-0905"; // good storytelling
+  } 
+  else if (
+    modelLower.includes("gpt-3.5") ||
+    modelLower.includes("fast")
+  ) {
+    nimModel = "nvidia/llama-3.1-nemotron-ultra-253b-v1";
+  } 
+  else {
+    // DEFAULT FALLBACK (important)
+    nimModel = "deepseek-ai/deepseek-v3.1";
+  }
+}uct";
       }
    
     const nimRequest = {
