@@ -87,7 +87,9 @@ app.post("/v1/chat/completions", async (req, res) => {
 
     let nimModel = MODEL_MAPPING[model];
     
-    // Smart fallback aligned with your actual NIM models
+let nimModel = MODEL_MAPPING[model];
+
+// Smart fallback aligned with your actual NIM models
 if (!nimModel) {
   const modelLower = model?.toLowerCase?.() || "";
 
@@ -96,20 +98,20 @@ if (!nimModel) {
     modelLower.includes("deepseek") ||
     modelLower.includes("best")
   ) {
-    nimModel = "deepseek-ai/deepseek-v3.1"; // BEST slow burn
+    nimModel = "deepseek-ai/deepseek-v3.1";
   } 
   else if (
     modelLower.includes("gemini") ||
     modelLower.includes("thinking") ||
     modelLower.includes("advanced")
   ) {
-    nimModel = "qwen/qwen3-next-80b-a3b-thinking"; // hesitation king
+    nimModel = "qwen/qwen3-next-80b-a3b-thinking";
   } 
   else if (
     modelLower.includes("turbo") ||
     modelLower.includes("kimi")
   ) {
-    nimModel = "moonshotai/kimi-k2-instruct-0905"; // good storytelling
+    nimModel = "moonshotai/kimi-k2-instruct-0905";
   } 
   else if (
     modelLower.includes("gpt-3.5") ||
@@ -118,15 +120,13 @@ if (!nimModel) {
     nimModel = "nvidia/llama-3.1-nemotron-ultra-253b-v1";
   } 
   else {
-    // DEFAULT FALLBACK (important)
     nimModel = "deepseek-ai/deepseek-v3.1";
   }
-}uct";
-      }
-   
+}
+  
     const nimRequest = {
       model: nimModel,
-      messages: enhancedMessages,
+      messages: messages,
       temperature: temperature ?? 0.775,
       max_tokens: Math.max(max_tokens ?? 0, 350), // minimum 350, not capped
       top_p: 0.7,
