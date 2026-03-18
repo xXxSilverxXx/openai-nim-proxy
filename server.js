@@ -106,18 +106,7 @@ app.post("/v1/chat/completions", async (req, res) => {
       } else {
         nimModel = "meta/llama-3.1-8b-instruct";
       }
-    }
-
-    // 🔥 Enhanced verbosity bias (not restrictive)
-    const enhancedMessages = [
-      {
-        role: "system",
-        content:
-          "Respond with AT LEAST 3–4 well-developed paragraphs. You may write more if appropriate. Be descriptive and thorough, while avoiding repetition, looping, or unnecessary filler."
-      },
-      ...messages
-    ];
-
+   
     const nimRequest = {
       model: nimModel,
       messages: enhancedMessages,
