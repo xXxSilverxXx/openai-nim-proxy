@@ -1,4 +1,4 @@
-// server.js — OpenAI-compatible proxy for NVIDIA NIM API (Railway-ready)
+// server.js — Stable OpenAI-compatible proxy for NVIDIA NIM API
 
 const express = require("express");
 const cors = require("cors");
@@ -8,28 +8,25 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ─────────────────────────────────────────────
-// Middleware (🚨 BODY LIMIT FIX FOR JANITOR AI)
+// Middleware
 // ─────────────────────────────────────────────
 app.use(cors());
-
-// Janitor AI sends LARGE payloads (chat history, character data, etc)
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ limit: "25mb", extended: true }));
 
 // ─────────────────────────────────────────────
-// Configuration
+// Config
 // ─────────────────────────────────────────────
 const NIM_API_BASE =
   process.env.NIM_API_BASE || "https://integrate.api.nvidia.com/v1";
 const NIM_API_KEY = process.env.NIM_API_KEY;
 
-// Toggle reasoning display (<think> tags)
 const SHOW_REASONING = false;
-
-// Enable thinking mode for supported models
 const ENABLE_THINKING_MODE = true;
 
-// Model mapping
+// ─────────────────────────────────────────────
+// Model Mapping
+// ─────────────────────────────────────────────
 const MODEL_MAPPING = {
   "gpt-3.5-turbo": "nvidia/llama-3.1-nemotron-ultra-253b-v1",
   "gpt-4": "qwen/qwen3-coder-480b-a35b-instruct",
@@ -41,7 +38,7 @@ const MODEL_MAPPING = {
 };
 
 // ─────────────────────────────────────────────
-// Root + Health
+// Routes
 // ─────────────────────────────────────────────
 app.get("/", (req, res) => {
   res.send("NVIDIA NIM OpenAI-compatible proxy is running");
@@ -50,23 +47,14 @@ app.get("/", (req, res) => {
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
-    service: "OpenAI → NVIDIA NIM Proxy",
-    reasoning_display: SHOW_REASONING,
-    thinking_mode: ENABLE_THINKING_MODE
+    service: "OpenAI → NVIDIA NIM Proxy"
   });
 });
 
-// OpenAI base compatibility endpoint
 app.get("/v1", (req, res) => {
-  res.json({
-    object: "api",
-    status: "ok"
-  });
+  res.json({ object: "api", status: "ok" });
 });
 
-// ─────────────────────────────────────────────
-// OpenAI-compatible model list
-// ─────────────────────────────────────────────
 app.get("/v1/models", (req, res) => {
   const models = Object.keys(MODEL_MAPPING).map((id) => ({
     id,
@@ -79,63 +67,47 @@ app.get("/v1/models", (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// Chat completions proxy
+// Chat Completions
 // ─────────────────────────────────────────────
 app.post("/v1/chat/completions", async (req, res) => {
   try {
-    const { model, messages, temperature, max_tokens, stream } = req.body;
-    
-let nimModel = MODEL_MAPPING[model];
+    const { model, messages, temperature, max_tokens } = req.body;
 
-// Smart fallback aligned with your actual NIM models
-if (!nimModel) {
-  const modelLower = model?.toLowerCase?.() || "";
+    // ───── Model Selection ─────
+    let nimModel = MODEL_MAPPING[model];
 
-  if (
-    modelLower.includes("gpt-4o") ||
-    modelLower.includes("deepseek") ||
-    modelLower.includes("best")
-  ) {
-    nimModel = "deepseek-ai/deepseek-v3.1";
-  } 
-  else if (
-    modelLower.includes("gemini") ||
-    modelLower.includes("thinking") ||
-    modelLower.includes("advanced")
-  ) {
-    nimModel = "qwen/qwen3-next-80b-a3b-thinking";
-  } 
-  else if (
-    modelLower.includes("turbo") ||
-    modelLower.includes("kimi")
-  ) {
-    nimModel = "moonshotai/kimi-k2-instruct-0905";
-  } 
-  else if (
-    modelLower.includes("gpt-3.5") ||
-    modelLower.includes("fast")
-  ) {
-    nimModel = "nvidia/llama-3.1-nemotron-ultra-253b-v1";
-  } 
-  else {
-    nimModel = "deepseek-ai/deepseek-v3.1";
-  }
-}
-  
+    if (!nimModel) {
+      const m = model?.toLowerCase?.() || "";
+
+      if (m.includes("deepseek") || m.includes("gpt-4o")) {
+        nimModel = "deepseek-ai/deepseek-v3.1";
+      } else if (m.includes("gemini") || m.includes("thinking")) {
+        nimModel = "qwen/qwen3-next-80b-a3b-thinking";
+      } else if (m.includes("turbo") || m.includes("kimi")) {
+        nimModel = "moonshotai/kimi-k2-instruct-0905";
+      } else {
+        nimModel = "deepseek-ai/deepseek-v3.1";
+      }
+    }
+
+    // ───── Safe Thinking Toggle ─────
+    const supportsThinking =
+      nimModel.includes("deepseek") || nimModel.includes("qwen");
+
+    // ───── CLEAN REQUEST (no 400 triggers) ─────
     const nimRequest = {
       model: nimModel,
       messages: messages,
-      temperature: temperature ?? 0.775,
-      max_tokens: Math.max(max_tokens ?? 0, 350), // minimum 350, not capped
-      top_p: 0.7,
-      presence_penalty: 0.6,
-      frequency_penalty: 0.3,
-      stream: !!stream,
-      extra_body: ENABLE_THINKING_MODE
-        ? { chat_template_kwargs: { thinking: true } }
-        : undefined
+      temperature: temperature ?? 0.7,
+      max_tokens: max_tokens ?? 300,
+      top_p: 0.9,
+      stream: false, // 🔥 critical for Janitor app stability
+      ...(ENABLE_THINKING_MODE && supportsThinking
+        ? { extra_body: { chat_template_kwargs: { thinking: true } } }
+        : {})
     };
 
+    // ───── API CALL ─────
     const response = await axios.post(
       `${NIM_API_BASE}/chat/completions`,
       nimRequest,
@@ -144,78 +116,26 @@ if (!nimModel) {
           Authorization: `Bearer ${NIM_API_KEY}`,
           "Content-Type": "application/json"
         },
+        timeout: 60000,
         maxBodyLength: Infinity,
-        maxContentLength: Infinity,
-        responseType: stream ? "stream" : "json"
+        maxContentLength: Infinity
       }
     );
 
-    // ───────── Streaming (SSE) ─────────
-    if (stream) {
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
+    // ───── Guard Against Empty Response ─────
+    if (!response.data || !response.data.choices) {
+      console.error("⚠️ Empty response from NIM:", response.data);
 
-      let buffer = "";
-      let reasoningOpen = false;
-
-      response.data.on("data", (chunk) => {
-        buffer += chunk.toString();
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-
-          if (line.includes("[DONE]")) {
-            res.write(line + "\n\n");
-            continue;
-          }
-
-          try {
-            const data = JSON.parse(line.slice(6));
-
-            // ✅ Ensure delta always exists (Chub stability fix)
-            if (data.choices && data.choices[0] && !data.choices[0].delta) {
-              data.choices[0].delta = {};
-            }
-
-            const delta = data.choices?.[0]?.delta;
-
-            if (delta) {
-              const reasoning = delta.reasoning_content;
-              const content = delta.content;
-
-              if (SHOW_REASONING && reasoning) {
-                delta.content = reasoningOpen
-                  ? reasoning
-                  : `<think>\n${reasoning}`;
-                reasoningOpen = true;
-              }
-
-              if (content) {
-                delta.content = reasoningOpen
-                  ? `</think>\n\n${content}`
-                  : content;
-                reasoningOpen = false;
-              }
-
-              delete delta.reasoning_content;
-            }
-
-            res.write(`data: ${JSON.stringify(data)}\n\n`);
-          } catch {
-            res.write(line + "\n\n");
-          }
+      return res.status(502).json({
+        error: {
+          message: "Empty response from upstream model",
+          type: "bad_gateway",
+          code: 502
         }
       });
-
-      response.data.on("end", () => res.end());
-      response.data.on("error", () => res.end());
-      return;
     }
 
-    // ───────── Non-streaming ─────────
+    // ───── Format Response ─────
     const openaiResponse = {
       id: `chatcmpl-${Date.now()}`,
       object: "chat.completion",
@@ -232,7 +152,10 @@ if (!nimModel) {
 
         return {
           index,
-          message: { role: "assistant", content },
+          message: {
+            role: "assistant",
+            content
+          },
           finish_reason: choice.finish_reason
         };
       }),
@@ -245,11 +168,14 @@ if (!nimModel) {
 
     res.json(openaiResponse);
   } catch (error) {
-    console.error("Proxy error:", error?.message || error);
+    console.error("Proxy error:", error?.response?.data || error.message);
 
     res.status(error?.response?.status || 500).json({
       error: {
-        message: error?.message || "Internal server error",
+        message:
+          error?.response?.data?.error?.message ||
+          error.message ||
+          "Internal server error",
         type: "invalid_request_error",
         code: error?.response?.status || 500
       }
@@ -258,7 +184,7 @@ if (!nimModel) {
 });
 
 // ─────────────────────────────────────────────
-// Fallback
+// 404 fallback
 // ─────────────────────────────────────────────
 app.all("*", (req, res) => {
   res.status(404).json({
@@ -271,11 +197,8 @@ app.all("*", (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// 🚀 Start server
+// Start Server
 // ─────────────────────────────────────────────
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`OpenAI → NVIDIA NIM Proxy running on port ${PORT}`);
-  console.log(`Health check: /health`);
-  console.log(`Reasoning display: ${SHOW_REASONING ? "ON" : "OFF"}`);
-  console.log(`Thinking mode: ${ENABLE_THINKING_MODE ? "ON" : "OFF"}`);
+  console.log(`Proxy running on port ${PORT}`);
 });
