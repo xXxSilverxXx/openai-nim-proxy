@@ -58,13 +58,17 @@ app.get("/v1", (req, res) => {
   res.json({ object: "api", status: "ok" });
 });
 
-app.get("/v1/models", (req, res) => {
-  const models = Object.keys(MODEL_MAPPING).map((id) => ({
-    id,
-    object: "model",
-    created: Date.now(),
-    owned_by: "nvidia-nim-proxy"
-  }));
+app.get("/v1/models", async (req, res) => {
+  const r = await fetch("https://YOUR_NIM_ENDPOINT/v1/models", {
+    headers: {
+      Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`
+    }
+  });
+
+  const data = await r.json();
+
+  res.json(data);
+});
 
   res.json({ object: "list", data: models });
 });
