@@ -1,5 +1,3 @@
-// server.js — Stable OpenAI-compatible NVIDIA NIM proxy
-
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
@@ -7,42 +5,45 @@ const axios = require("axios");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────
 // Middleware
-// ─────────────────────────────────────────────
+// ─────────────────────────────
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
-app.use(express.urlencoded({ limit: "25mb", extended: true }));
+app.use(express.urlencoded({ extended: true }));
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────
 // Config
-// ─────────────────────────────────────────────
+// ─────────────────────────────
 const NIM_API_BASE =
   process.env.NIM_API_BASE || "https://integrate.api.nvidia.com/v1";
 
 const NIM_API_KEY = process.env.NIM_API_KEY;
 
-// ─────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// ─────────────────────────────
+// Chat-safe model filter
+// (prevents embeddings/vision breaking chat)
+// ─────────────────────────────
+const CHAT_KEYWORDS = [
+  "instruct",
+  "chat",
+  "llama",
+  "mistral",
+  "mixtral",
+  "qwen",
+  "deepseek",
+  "nemotron",
+  "kimi",
+  "gpt-oss",
+  "solar",
+  "step",
+  "granite",
+  "writer"
+];
 
-// ─────────────────────────────────────────────
-// Model Mapping (OpenAI → NIM safe equivalents)
-// ─────────────────────────────────────────────
-const MODEL_MAPPING = {
-  "gpt-3.5-turbo": "meta/llama-3.1-8b-instruct",
-  "gpt-4": "qwen/qwen3-coder-32b-instruct",
-  "gpt-4-turbo": "moonshotai/kimi-k2-instruct",
-  "gpt-4o": "deepseek-ai/deepseek-v3.1",
-  "claude-3-opus": "anthropic/claude-3.5-sonnet",
-  "claude-3-sonnet": "anthropic/claude-3.5-haiku",
-  "gemini-pro": "qwen/qwen3-next-80b-a3b-thinking"
-};
-
-// ─────────────────────────────────────────────
-// Health / basic routes
-// ─────────────────────────────────────────────
+// ─────────────────────────────
+// Basic routes
+// ─────────────────────────────
 app.get("/", (req, res) => {
   res.send("NIM Proxy Running");
 });
@@ -51,13 +52,9 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-app.get("/v1", (req, res) => {
-  res.json({ object: "api", status: "ok" });
-});
-
-// ─────────────────────────────────────────────
-// REAL Models Route (FIXED)
-// ─────────────────────────────────────────────
+// ─────────────────────────────
+// SAFE MODEL LIST (FIXED)
+// ─────────────────────────────
 app.get("/v1/models", async (req, res) => {
   try {
     const r = await axios.get(`${NIM_API_BASE}/models`, {
@@ -67,7 +64,14 @@ app.get("/v1/models", async (req, res) => {
       timeout: 15000
     });
 
-    const models = (r.data?.data || []).map((m) => ({
+    const rawModels = r.data?.data || [];
+
+    const chatModels = rawModels.filter((m) => {
+      const id = (m.id || "").toLowerCase();
+      return CHAT_KEYWORDS.some((k) => id.includes(k));
+    });
+
+    const models = chatModels.map((m) => ({
       id: m.id,
       object: "model",
       created: m.created || Date.now(),
@@ -79,9 +83,8 @@ app.get("/v1/models", async (req, res) => {
       data: models
     });
   } catch (err) {
-    console.error("Failed to fetch models:", err.message);
+    console.error("Model fetch failed:", err.message);
 
-    // safe fallback so frontend never breaks
     res.json({
       object: "list",
       data: []
@@ -89,33 +92,50 @@ app.get("/v1/models", async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────
-// Chat Completions
-// ─────────────────────────────────────────────
+// ─────────────────────────────
+// CHAT COMPLETIONS (STABLE ROUTER)
+// ─────────────────────────────
 app.post("/v1/chat/completions", async (req, res) => {
   try {
     const { model, messages, temperature, max_tokens } = req.body;
 
-    const mappedModel =
-      MODEL_MAPPING[model] || "deepseek-ai/deepseek-v3.1";
-
+    // Safe fallback list (ONLY real chat models)
     const fallbackModels = [
-      mappedModel,
-      "deepseek-ai/deepseek-v3.1",
-      "qwen/qwen3-coder-32b-instruct",
-      "meta/llama-3.1-8b-instruct"
+      "deepseek-ai/deepseek-v3.2",
+      "meta/llama-3.3-70b-instruct",
+      "mistralai/mistral-large-2-instruct",
+      "qwen/qwen3-next-80b-a3b-instruct",
+      "nvidia/llama-3.1-nemotron-ultra-253b-v1"
+    ];
+
+    // If frontend sends unknown model, ignore it safely
+    const requested = (model || "").toLowerCase();
+
+    let modelQueue = [];
+
+    const matchedFallback = fallbackModels.find((m) =>
+      m.toLowerCase().includes(requested)
+    );
+
+    if (matchedFallback) {
+      modelQueue.push(matchedFallback);
+    }
+
+    modelQueue = [
+      ...modelQueue,
+      ...fallbackModels.filter((m) => !modelQueue.includes(m))
     ];
 
     let lastError = null;
 
-    for (const modelToTry of fallbackModels) {
+    for (const m of modelQueue) {
       try {
-        console.log("Trying model:", modelToTry);
+        console.log("Trying model:", m);
 
         const result = await axios.post(
           `${NIM_API_BASE}/chat/completions`,
           {
-            model: modelToTry,
+            model: m,
             messages,
             temperature: temperature ?? 0.7,
             max_tokens: max_tokens ?? 300,
@@ -136,7 +156,7 @@ app.post("/v1/chat/completions", async (req, res) => {
             id: `chatcmpl-${Date.now()}`,
             object: "chat.completion",
             created: Math.floor(Date.now() / 1000),
-            model,
+            model: m,
             choices: result.data.choices.map((c, i) => ({
               index: i,
               message: {
@@ -154,17 +174,11 @@ app.post("/v1/chat/completions", async (req, res) => {
         }
       } catch (err) {
         lastError = err;
-        console.warn(
-          "Model failed:",
-          modelToTry,
-          err?.response?.data || err.message
-        );
-
-        await sleep(1000);
+        console.warn("Model failed:", m, err.message);
       }
     }
 
-    // final fallback response (never fails API contract)
+    // Always-safe fallback response
     return res.json({
       id: `chatcmpl-${Date.now()}`,
       object: "chat.completion",
@@ -176,7 +190,7 @@ app.post("/v1/chat/completions", async (req, res) => {
           message: {
             role: "assistant",
             content:
-              "The model service is temporarily unavailable. Please try again."
+              "All models are temporarily unavailable. Please try again."
           },
           finish_reason: "stop"
         }
@@ -187,12 +201,12 @@ app.post("/v1/chat/completions", async (req, res) => {
         total_tokens: 0
       }
     });
-  } catch (error) {
-    console.error("Fatal proxy error:", error.message);
+  } catch (err) {
+    console.error("Fatal error:", err.message);
 
     return res.status(500).json({
       error: {
-        message: error.message || "Internal server error",
+        message: err.message,
         type: "server_error",
         code: 500
       }
@@ -200,9 +214,9 @@ app.post("/v1/chat/completions", async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────
-// 404 handler
-// ─────────────────────────────────────────────
+// ─────────────────────────────
+// 404 fallback
+// ─────────────────────────────
 app.all("*", (req, res) => {
   res.status(404).json({
     error: {
@@ -213,9 +227,9 @@ app.all("*", (req, res) => {
   });
 });
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────
 // Start server
-// ─────────────────────────────────────────────
+// ─────────────────────────────
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`NIM Proxy running on port ${PORT}`);
 });
