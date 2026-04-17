@@ -1,4 +1,4 @@
-// server.js — Stable OpenAI-compatible proxy for NVIDIA NIM API
+// server.js — Production-stable OpenAI-compatible proxy for NVIDIA NIM
 
 const express = require("express");
 const cors = require("cors");
@@ -22,6 +22,13 @@ const NIM_API_BASE =
 const NIM_API_KEY = process.env.NIM_API_KEY;
 
 const ENABLE_THINKING_MODE = true;
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // ─────────────────────────────────────────────
 // Model Mapping
@@ -69,14 +76,8 @@ app.post("/v1/chat/completions", async (req, res) => {
   try {
     const { model, messages, temperature, max_tokens } = req.body;
 
-    let nimModel = MODEL_MAPPING[model];
+    let nimModel = MODEL_MAPPING[model] || "deepseek-ai/deepseek-v3.1";
 
-    // Fallback selection
-    if (!nimModel) {
-      nimModel = "deepseek-ai/deepseek-v3.1";
-    }
-
-    // Thinking support
     const supportsThinking =
       nimModel.includes("deepseek") || nimModel.includes("qwen");
 
@@ -92,9 +93,8 @@ app.post("/v1/chat/completions", async (req, res) => {
         : {})
     };
 
-    // 🔥 RETRY + FALLBACK SYSTEM
+    // 🔥 STABLE FALLBACK ORDER (most reliable first)
     const fallbackModels = [
-      nimModel,
       "deepseek-ai/deepseek-v3.1",
       "moonshotai/kimi-k2-instruct-0905",
       "nvidia/llama-3.1-nemotron-ultra-253b-v1"
@@ -130,24 +130,50 @@ app.post("/v1/chat/completions", async (req, res) => {
         }
       } catch (err) {
         lastError = err;
-        console.warn("Model failed:", modelToTry);
+
+        console.warn(
+          "Model failed:",
+          modelToTry,
+          err?.response?.data || err.message
+        );
+
+        // 🔥 critical delay (lets degraded models recover)
+        await sleep(1200);
       }
     }
 
-    // If all models fail
+    // ❌ If ALL models fail → return valid OpenAI response (NOT error)
     if (!response || !response.data || !response.data.choices) {
-      console.error("All models failed:", lastError?.response?.data || lastError);
+      console.error(
+        "All models failed:",
+        lastError?.response?.data || lastError
+      );
 
-      return res.status(502).json({
-        error: {
-          message: "All models failed",
-          type: "bad_gateway",
-          code: 502
+      return res.json({
+        id: `chatcmpl-${Date.now()}`,
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model: model,
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content:
+                "[The AI is temporarily overloaded. Please retry your message in a moment.]"
+            },
+            finish_reason: "stop"
+          }
+        ],
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0
         }
       });
     }
 
-    // Format response
+    // ✅ Normal success response
     const openaiResponse = {
       id: `chatcmpl-${Date.now()}`,
       object: "chat.completion",
@@ -175,6 +201,7 @@ app.post("/v1/chat/completions", async (req, res) => {
     res.status(error?.response?.status || 500).json({
       error: {
         message:
+          error?.response?.data?.detail ||
           error?.response?.data?.error?.message ||
           error.message ||
           "Internal server error",
