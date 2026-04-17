@@ -1,4 +1,4 @@
-// server.js — Production-stable OpenAI-compatible proxy for NVIDIA NIM
+// server.js — Stable OpenAI-compatible NVIDIA NIM proxy
 
 const express = require("express");
 const cors = require("cors");
@@ -19,35 +19,32 @@ app.use(express.urlencoded({ limit: "25mb", extended: true }));
 // ─────────────────────────────────────────────
 const NIM_API_BASE =
   process.env.NIM_API_BASE || "https://integrate.api.nvidia.com/v1";
-const NIM_API_KEY = process.env.NIM_API_KEY;
 
-const ENABLE_THINKING_MODE = true;
+const NIM_API_KEY = process.env.NIM_API_KEY;
 
 // ─────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ─────────────────────────────────────────────
-// Model Mapping
+// Model Mapping (OpenAI → NIM safe equivalents)
 // ─────────────────────────────────────────────
 const MODEL_MAPPING = {
-  "gpt-3.5-turbo": "nvidia/llama-3.1-nemotron-ultra-253b-v1",
-  "gpt-4": "qwen/qwen3-coder-480b-a35b-instruct",
-  "gpt-4-turbo": "moonshotai/kimi-k2-instruct-0905",
+  "gpt-3.5-turbo": "meta/llama-3.1-8b-instruct",
+  "gpt-4": "qwen/qwen3-coder-32b-instruct",
+  "gpt-4-turbo": "moonshotai/kimi-k2-instruct",
   "gpt-4o": "deepseek-ai/deepseek-v3.1",
-  "claude-3-opus": "openai/gpt-oss-120b",
-  "claude-3-sonnet": "openai/gpt-oss-20b",
+  "claude-3-opus": "anthropic/claude-3.5-sonnet",
+  "claude-3-sonnet": "anthropic/claude-3.5-haiku",
   "gemini-pro": "qwen/qwen3-next-80b-a3b-thinking"
 };
 
 // ─────────────────────────────────────────────
-// Routes
+// Health / basic routes
 // ─────────────────────────────────────────────
 app.get("/", (req, res) => {
-  res.send("Proxy is running");
+  res.send("NIM Proxy Running");
 });
 
 app.get("/health", (req, res) => {
@@ -58,19 +55,38 @@ app.get("/v1", (req, res) => {
   res.json({ object: "api", status: "ok" });
 });
 
+// ─────────────────────────────────────────────
+// REAL Models Route (FIXED)
+// ─────────────────────────────────────────────
 app.get("/v1/models", async (req, res) => {
-  const r = await fetch("https://YOUR_NIM_ENDPOINT/v1/models", {
-    headers: {
-      Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`
-    }
-  });
+  try {
+    const r = await axios.get(`${NIM_API_BASE}/models`, {
+      headers: {
+        Authorization: `Bearer ${NIM_API_KEY}`
+      },
+      timeout: 15000
+    });
 
-  const data = await r.json();
+    const models = (r.data?.data || []).map((m) => ({
+      id: m.id,
+      object: "model",
+      created: m.created || Date.now(),
+      owned_by: "nvidia-nim"
+    }));
 
-  res.json(data);
-});
+    res.json({
+      object: "list",
+      data: models
+    });
+  } catch (err) {
+    console.error("Failed to fetch models:", err.message);
 
-  res.json({ object: "list", data: models });
+    // safe fallback so frontend never breaks
+    res.json({
+      object: "list",
+      data: []
+    });
+  }
 });
 
 // ─────────────────────────────────────────────
@@ -80,45 +96,32 @@ app.post("/v1/chat/completions", async (req, res) => {
   try {
     const { model, messages, temperature, max_tokens } = req.body;
 
-    let nimModel = MODEL_MAPPING[model] || "deepseek-ai/deepseek-v3.1";
+    const mappedModel =
+      MODEL_MAPPING[model] || "deepseek-ai/deepseek-v3.1";
 
-    const supportsThinking =
-      nimModel.includes("deepseek") || nimModel.includes("qwen");
-
-    const baseRequest = {
-      model: nimModel,
-      messages: messages,
-      temperature: temperature ?? 0.7,
-      max_tokens: max_tokens ?? 300,
-      top_p: 0.9,
-      stream: false,
-      ...(ENABLE_THINKING_MODE && supportsThinking
-        ? { extra_body: { chat_template_kwargs: { thinking: true } } }
-        : {})
-    };
-
-    // 🔥 STABLE FALLBACK ORDER (most reliable first)
     const fallbackModels = [
+      mappedModel,
       "deepseek-ai/deepseek-v3.1",
-      "moonshotai/kimi-k2-instruct-0905",
-      "nvidia/llama-3.1-nemotron-ultra-253b-v1"
+      "qwen/qwen3-coder-32b-instruct",
+      "meta/llama-3.1-8b-instruct"
     ];
 
-    let response = null;
     let lastError = null;
 
     for (const modelToTry of fallbackModels) {
       try {
         console.log("Trying model:", modelToTry);
 
-        const attempt = {
-          ...baseRequest,
-          model: modelToTry
-        };
-
         const result = await axios.post(
           `${NIM_API_BASE}/chat/completions`,
-          attempt,
+          {
+            model: modelToTry,
+            messages,
+            temperature: temperature ?? 0.7,
+            max_tokens: max_tokens ?? 300,
+            top_p: 0.9,
+            stream: false
+          },
           {
             headers: {
               Authorization: `Bearer ${NIM_API_KEY}`,
@@ -128,101 +131,82 @@ app.post("/v1/chat/completions", async (req, res) => {
           }
         );
 
-        if (result.data && result.data.choices) {
-          response = result;
-          break;
+        if (result.data?.choices) {
+          return res.json({
+            id: `chatcmpl-${Date.now()}`,
+            object: "chat.completion",
+            created: Math.floor(Date.now() / 1000),
+            model,
+            choices: result.data.choices.map((c, i) => ({
+              index: i,
+              message: {
+                role: "assistant",
+                content: c.message?.content || ""
+              },
+              finish_reason: c.finish_reason
+            })),
+            usage: result.data.usage || {
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: 0
+            }
+          });
         }
       } catch (err) {
         lastError = err;
-
         console.warn(
           "Model failed:",
           modelToTry,
           err?.response?.data || err.message
         );
 
-        // 🔥 critical delay (lets degraded models recover)
-        await sleep(1200);
+        await sleep(1000);
       }
     }
 
-    // ❌ If ALL models fail → return valid OpenAI response (NOT error)
-    if (!response || !response.data || !response.data.choices) {
-      console.error(
-        "All models failed:",
-        lastError?.response?.data || lastError
-      );
-
-      return res.json({
-        id: `chatcmpl-${Date.now()}`,
-        object: "chat.completion",
-        created: Math.floor(Date.now() / 1000),
-        model: model,
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content:
-                "[The AI is temporarily overloaded. Please retry your message in a moment.]"
-            },
-            finish_reason: "stop"
-          }
-        ],
-        usage: {
-          prompt_tokens: 0,
-          completion_tokens: 0,
-          total_tokens: 0
-        }
-      });
-    }
-
-    // ✅ Normal success response
-    const openaiResponse = {
+    // final fallback response (never fails API contract)
+    return res.json({
       id: `chatcmpl-${Date.now()}`,
       object: "chat.completion",
       created: Math.floor(Date.now() / 1000),
       model,
-      choices: response.data.choices.map((choice, index) => ({
-        index,
-        message: {
-          role: "assistant",
-          content: choice.message?.content || ""
-        },
-        finish_reason: choice.finish_reason
-      })),
-      usage: response.data.usage || {
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content:
+              "The model service is temporarily unavailable. Please try again."
+          },
+          finish_reason: "stop"
+        }
+      ],
+      usage: {
         prompt_tokens: 0,
         completion_tokens: 0,
         total_tokens: 0
       }
-    };
-
-    res.json(openaiResponse);
+    });
   } catch (error) {
-    console.error("Proxy error:", error?.response?.data || error.message);
+    console.error("Fatal proxy error:", error.message);
 
-    res.status(error?.response?.status || 500).json({
+    return res.status(500).json({
       error: {
-        message:
-          error?.response?.data?.detail ||
-          error?.response?.data?.error?.message ||
-          error.message ||
-          "Internal server error",
-        type: "invalid_request_error",
-        code: error?.response?.status || 500
+        message: error.message || "Internal server error",
+        type: "server_error",
+        code: 500
       }
     });
   }
 });
 
 // ─────────────────────────────────────────────
-// 404 fallback
+// 404 handler
 // ─────────────────────────────────────────────
 app.all("*", (req, res) => {
   res.status(404).json({
     error: {
-      message: `Endpoint ${req.path} not found`,
+      message: `Route ${req.path} not found`,
       type: "invalid_request_error",
       code: 404
     }
@@ -230,8 +214,8 @@ app.all("*", (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// Start Server
+// Start server
 // ─────────────────────────────────────────────
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Proxy running on port ${PORT}`);
+  console.log(`NIM Proxy running on port ${PORT}`);
 });
