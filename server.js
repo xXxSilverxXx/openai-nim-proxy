@@ -21,7 +21,6 @@ const NIM_API_BASE =
   process.env.NIM_API_BASE || "https://integrate.api.nvidia.com/v1";
 const NIM_API_KEY = process.env.NIM_API_KEY;
 
-const SHOW_REASONING = false;
 const ENABLE_THINKING_MODE = true;
 
 // ─────────────────────────────────────────────
@@ -41,14 +40,11 @@ const MODEL_MAPPING = {
 // Routes
 // ─────────────────────────────────────────────
 app.get("/", (req, res) => {
-  res.send("NVIDIA NIM OpenAI-compatible proxy is running");
+  res.send("Proxy is running");
 });
 
 app.get("/health", (req, res) => {
-  res.json({
-    status: "ok",
-    service: "OpenAI → NVIDIA NIM Proxy"
-  });
+  res.json({ status: "ok" });
 });
 
 app.get("/v1", (req, res) => {
@@ -73,93 +69,99 @@ app.post("/v1/chat/completions", async (req, res) => {
   try {
     const { model, messages, temperature, max_tokens } = req.body;
 
-    // ───── Model Selection ─────
     let nimModel = MODEL_MAPPING[model];
 
+    // Fallback selection
     if (!nimModel) {
-      const m = model?.toLowerCase?.() || "";
-
-      if (m.includes("deepseek") || m.includes("gpt-4o")) {
-        nimModel = "deepseek-ai/deepseek-v3.1";
-      } else if (m.includes("gemini") || m.includes("thinking")) {
-        nimModel = "qwen/qwen3-next-80b-a3b-thinking";
-      } else if (m.includes("turbo") || m.includes("kimi")) {
-        nimModel = "moonshotai/kimi-k2-instruct-0905";
-      } else {
-        nimModel = "deepseek-ai/deepseek-v3.1";
-      }
+      nimModel = "deepseek-ai/deepseek-v3.1";
     }
 
-    // ───── Safe Thinking Toggle ─────
+    // Thinking support
     const supportsThinking =
       nimModel.includes("deepseek") || nimModel.includes("qwen");
 
-    // ───── CLEAN REQUEST (no 400 triggers) ─────
-    const nimRequest = {
+    const baseRequest = {
       model: nimModel,
       messages: messages,
       temperature: temperature ?? 0.7,
       max_tokens: max_tokens ?? 300,
       top_p: 0.9,
-      stream: false, // 🔥 critical for Janitor app stability
+      stream: false,
       ...(ENABLE_THINKING_MODE && supportsThinking
         ? { extra_body: { chat_template_kwargs: { thinking: true } } }
         : {})
     };
 
-    // ───── API CALL ─────
-    const response = await axios.post(
-      `${NIM_API_BASE}/chat/completions`,
-      nimRequest,
-      {
-        headers: {
-          Authorization: `Bearer ${NIM_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        timeout: 60000,
-        maxBodyLength: Infinity,
-        maxContentLength: Infinity
-      }
-    );
+    // 🔥 RETRY + FALLBACK SYSTEM
+    const fallbackModels = [
+      nimModel,
+      "deepseek-ai/deepseek-v3.1",
+      "moonshotai/kimi-k2-instruct-0905",
+      "nvidia/llama-3.1-nemotron-ultra-253b-v1"
+    ];
 
-    // ───── Guard Against Empty Response ─────
-    if (!response.data || !response.data.choices) {
-      console.error("⚠️ Empty response from NIM:", response.data);
+    let response = null;
+    let lastError = null;
+
+    for (const modelToTry of fallbackModels) {
+      try {
+        console.log("Trying model:", modelToTry);
+
+        const attempt = {
+          ...baseRequest,
+          model: modelToTry
+        };
+
+        const result = await axios.post(
+          `${NIM_API_BASE}/chat/completions`,
+          attempt,
+          {
+            headers: {
+              Authorization: `Bearer ${NIM_API_KEY}`,
+              "Content-Type": "application/json"
+            },
+            timeout: 60000
+          }
+        );
+
+        if (result.data && result.data.choices) {
+          response = result;
+          break;
+        }
+      } catch (err) {
+        lastError = err;
+        console.warn("Model failed:", modelToTry);
+      }
+    }
+
+    // If all models fail
+    if (!response || !response.data || !response.data.choices) {
+      console.error("All models failed:", lastError?.response?.data || lastError);
 
       return res.status(502).json({
         error: {
-          message: "Empty response from upstream model",
+          message: "All models failed",
           type: "bad_gateway",
           code: 502
         }
       });
     }
 
-    // ───── Format Response ─────
+    // Format response
     const openaiResponse = {
       id: `chatcmpl-${Date.now()}`,
       object: "chat.completion",
       created: Math.floor(Date.now() / 1000),
       model,
-      choices: response.data.choices.map((choice, index) => {
-        let content = choice.message?.content || "";
-
-        if (SHOW_REASONING && choice.message?.reasoning_content) {
-          content =
-            `<think>\n${choice.message.reasoning_content}\n</think>\n\n` +
-            content;
-        }
-
-        return {
-          index,
-          message: {
-            role: "assistant",
-            content
-          },
-          finish_reason: choice.finish_reason
-        };
-      }),
-      usage: response.data.usage ?? {
+      choices: response.data.choices.map((choice, index) => ({
+        index,
+        message: {
+          role: "assistant",
+          content: choice.message?.content || ""
+        },
+        finish_reason: choice.finish_reason
+      })),
+      usage: response.data.usage || {
         prompt_tokens: 0,
         completion_tokens: 0,
         total_tokens: 0
