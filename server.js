@@ -101,11 +101,11 @@ app.post("/v1/chat/completions", async (req, res) => {
     // ─────────────────────────────────────────────
     const fallbackModels = [
       safeModel, // 👈 CRITICAL: user selection ALWAYS FIRST
-      "deepseek-ai/deepseek-v3.2"
-      "mistralai/mistral-large-2-instruct"
+      "deepseek-ai/deepseek-v3.2",
+      "mistralai/mistral-large-2-instruct",
       "meta/llama-3.3-70b-instruct",
       "qwen/qwen3-next-80b-a3b-instruct",
-      "mistralai/mistral-small-4-119b-2603",
+      "mistralai/mistral-small-4-119b-2603"
     ];
 
     let lastError = null;
