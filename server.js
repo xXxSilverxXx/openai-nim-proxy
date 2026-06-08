@@ -84,9 +84,10 @@ const FALLBACK_MODELS = [
 
 async function refreshModels() {
 try {
-const now = Date.now();
 
 ```
+const now = Date.now();
+
 if (
   cachedModels.length &&
   now - lastModelFetch < MODEL_CACHE_MS
@@ -97,7 +98,7 @@ if (
 console.log("Refreshing NVIDIA model cache...");
 
 const response = await axios.get(
-  `${NIM_API_BASE}/models`,
+  NIM_API_BASE + "/models",
   {
     headers: {
       Authorization: `Bearer ${NIM_API_KEY}`
@@ -109,7 +110,7 @@ const response = await axios.get(
 const rawModels = response.data?.data || [];
 
 cachedModels = rawModels
-  .filter((m) => m?.id)
+  .filter((m) => m && m.id)
   .map((m) => ({
     id: m.id,
     object: "model",
@@ -129,10 +130,14 @@ console.log(
 ```
 
 } catch (err) {
+
+```
 console.error(
-"Model refresh failed:",
-err?.response?.data || err.message
+  "Model refresh failed:",
+  err?.response?.data || err.message
 );
+```
+
 }
 }
 
