@@ -78,7 +78,7 @@ async function refreshModels() {
         headers: {
           Authorization: "Bearer " + NIM_API_KEY
         },
-        timeout: 15000
+        timeout: 30000
       }
     );
 
@@ -248,7 +248,7 @@ app.post("/v1/chat/completions", async function(req, res) {
 
       // Safe default
       if (payload.max_tokens === undefined) {
-        payload.max_tokens = 500;
+        payload.max_tokens = 2500;
       }
 
       try {
@@ -261,7 +261,7 @@ app.post("/v1/chat/completions", async function(req, res) {
               Authorization: "Bearer " + NIM_API_KEY,
               "Content-Type": "application/json"
             },
-            timeout: 30000
+            timeout: 90000
           }
         );
 
