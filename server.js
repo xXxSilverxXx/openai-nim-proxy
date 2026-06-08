@@ -367,7 +367,33 @@ app.post("/v1/chat/completions", async function(req, res) {
 
       model: finalModel,
 
-      choices: finalResponse.choices,
+      choices: [
+  {
+    index: 0,
+    message: {
+      role: "assistant",
+      content:
+        (
+          finalResponse &&
+          finalResponse.choices &&
+          finalResponse.choices[0] &&
+          finalResponse.choices[0].message &&
+          typeof finalResponse.choices[0].message.content === "string"
+        )
+          ? finalResponse.choices[0].message.content
+          : ""
+    },
+    finish_reason:
+      (
+        finalResponse &&
+        finalResponse.choices &&
+        finalResponse.choices[0] &&
+        finalResponse.choices[0].finish_reason
+      )
+        ? finalResponse.choices[0].finish_reason
+        : "stop"
+  }
+],
 
       usage:
         finalResponse.usage || {
