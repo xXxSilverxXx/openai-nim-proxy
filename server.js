@@ -48,12 +48,10 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 
 // RP-optimized fallback list
 var FALLBACK_MODELS = [
-  "deepseek-ai/deepseek-v4-pro",
   "deepseek-ai/deepseek-v4-flash",
-  "writer/palmyra-creative-122b",
-  "qwen/qwen3-next-80b-a3b-instruct",
   "nvidia/llama-3.3-nemotron-super-49b-v1.5",
-  "meta/llama-3.3-70b-instruct"
+  "meta/llama-3.3-70b-instruct",
+  "deepseek-ai/deepseek-v4-pro"
 ];
 
 // Refresh model cache
