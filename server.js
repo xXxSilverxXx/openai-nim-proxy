@@ -70,7 +70,6 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 // ============================================================
 
 var FALLBACK_MODELS = [
-  "moonshotai/kimi-k2.6",
   "z-ai/glm-5.2",
   "minimaxai/minimax-m3",
   "deepseek-ai/deepseek-v4-pro",
