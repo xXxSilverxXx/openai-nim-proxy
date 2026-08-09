@@ -11,7 +11,8 @@ const NIM_API_BASE =
   "https://integrate.api.nvidia.com/v1";
 
 const NIM_API_KEY =
-  process.env.NIM_API_KEY;
+  process.env.NIM_API_KEY ||
+  process.env.NVIDIA_API_KEY;
 
 // Middleware
 app.use(cors());
@@ -26,35 +27,82 @@ app.use(express.urlencoded({
 }));
 
 // Prevent crashes
-process.on("unhandledRejection", function(err) {
+process.on("unhandledRejection", function (err) {
   console.error("UNHANDLED REJECTION:", err);
 });
 
-process.on("uncaughtException", function(err) {
+process.on("uncaughtException", function (err) {
   console.error("UNCAUGHT EXCEPTION:", err);
 });
 
-// Axios should not throw on non-200
+// Axios should not throw automatically on HTTP errors
 axios.defaults.validateStatus = function () {
   return true;
 };
 
-// Model cache
+
+// ============================================================
+// MODEL CACHE
+// ============================================================
+
 var cachedModels = [];
 var availableModels = {};
 var lastModelFetch = 0;
 
 var MODEL_CACHE_MS = 10 * 60 * 1000;
 
-// RP-optimized fallback list
+
+// ============================================================
+// RP-OPTIMIZED FALLBACK ORDER
+// ============================================================
+//
+// The proxy checks NVIDIA's LIVE /models endpoint before using
+// these models. This list controls priority, not availability.
+//
+// The order is intentionally optimized toward:
+// - Character/RP quality
+// - Instruction following
+// - Natural dialogue
+// - Context handling
+// - Reduced unnecessary reasoning
+// - Reliability
+//
+// ============================================================
+
 var FALLBACK_MODELS = [
+  "moonshotai/kimi-k2.6",
+  "z-ai/glm-5.2",
+  "minimaxai/minimax-m3",
+  "deepseek-ai/deepseek-v4-pro",
   "deepseek-ai/deepseek-v4-flash",
+  "nvidia/nemotron-3-super-120b-a12b",
+  "nvidia/nemotron-3-ultra-550b-a55b",
+  "thinkingmachines/inkling",
+  "poolside/laguna-xs-2.1",
   "nvidia/llama-3.3-nemotron-super-49b-v1.5",
-  "meta/llama-3.3-70b-instruct",
-  "deepseek-ai/deepseek-v4-pro"
+  "meta/llama-3.3-70b-instruct"
 ];
 
-// Refresh model cache
+
+// ============================================================
+// MODELS WHERE THINKING CAN BE DISABLED
+// ============================================================
+
+var NON_THINKING_MODELS = {
+  "deepseek-ai/deepseek-v4-pro": true,
+  "deepseek-ai/deepseek-v4-flash": true,
+  "nvidia/nemotron-3-super-120b-a12b": true,
+  "nvidia/nemotron-3-ultra-550b-a55b": true,
+  "moonshotai/kimi-k2.6": true,
+  "z-ai/glm-5.2": true,
+  "minimaxai/minimax-m3": true
+};
+
+
+// ============================================================
+// REFRESH NVIDIA MODEL CACHE
+// ============================================================
+
 async function refreshModels() {
 
   try {
@@ -70,6 +118,13 @@ async function refreshModels() {
 
     console.log("Refreshing NVIDIA models...");
 
+    if (!NIM_API_KEY) {
+      console.error(
+        "NVIDIA API key is missing. Set NIM_API_KEY or NVIDIA_API_KEY."
+      );
+      return;
+    }
+
     var response = await axios.get(
       NIM_API_BASE + "/models",
       {
@@ -79,6 +134,15 @@ async function refreshModels() {
         timeout: 30000
       }
     );
+
+    if (response.status === 401 || response.status === 403) {
+
+      console.error(
+        "NVIDIA API KEY REJECTED. HTTP " + response.status
+      );
+
+      return;
+    }
 
     var rawModels = [];
 
@@ -102,8 +166,8 @@ async function refreshModels() {
         cachedModels.push({
           id: m.id,
           object: "model",
-          created: m.created || now,
-          owned_by: "nvidia-nim"
+          created: m.created || Math.floor(now / 1000),
+          owned_by: m.owned_by || "nvidia-nim"
         });
 
         availableModels[m.id] = true;
@@ -127,11 +191,19 @@ async function refreshModels() {
   }
 }
 
-// Initial model load
+
+// ============================================================
+// INITIAL MODEL LOAD
+// ============================================================
+
 refreshModels();
 
-// Models endpoint
-app.get("/v1/models", async function(req, res) {
+
+// ============================================================
+// MODELS ENDPOINT
+// ============================================================
+
+app.get("/v1/models", async function (req, res) {
 
   await refreshModels();
 
@@ -142,18 +214,27 @@ app.get("/v1/models", async function(req, res) {
 
 });
 
-// Health endpoint
-app.get("/health", function(req, res) {
+
+// ============================================================
+// HEALTH ENDPOINT
+// ============================================================
+
+app.get("/health", function (req, res) {
 
   return res.json({
     status: "ok",
-    models_cached: cachedModels.length
+    models_cached: cachedModels.length,
+    api_key_configured: !!NIM_API_KEY
   });
 
 });
 
-// Chat completions endpoint
-app.post("/v1/chat/completions", async function(req, res) {
+
+// ============================================================
+// CHAT COMPLETIONS
+// ============================================================
+
+app.post("/v1/chat/completions", async function (req, res) {
 
   try {
 
@@ -173,17 +254,31 @@ app.post("/v1/chat/completions", async function(req, res) {
       safeMessages = body.messages;
     }
 
-    // Build model list
+
+    // ========================================================
+    // BUILD MODEL CANDIDATE LIST
+    // ========================================================
+
     var candidateModels = [];
 
+
+    // User/frontend requested model gets first priority
     if (
       requestedModel &&
       availableModels[requestedModel]
     ) {
+
       candidateModels.push(requestedModel);
+
     }
 
-    for (var i = 0; i < FALLBACK_MODELS.length; i++) {
+
+    // Then use our RP-optimized priority list
+    for (
+      var i = 0;
+      i < FALLBACK_MODELS.length;
+      i++
+    ) {
 
       var fallback = FALLBACK_MODELS[i];
 
@@ -191,22 +286,49 @@ app.post("/v1/chat/completions", async function(req, res) {
         availableModels[fallback] &&
         candidateModels.indexOf(fallback) === -1
       ) {
+
         candidateModels.push(fallback);
+
       }
+
     }
 
-    // Emergency fallback
+
+    // ========================================================
+    // EMERGENCY FALLBACK
+    // ========================================================
+
     if (candidateModels.length === 0) {
-      candidateModels.push(
-        "meta/llama-3.3-70b-instruct"
+
+      console.error(
+        "No configured fallback models are currently available."
       );
+
+      return res.status(503).json({
+        error: {
+          message:
+            "No configured NVIDIA models are currently available.",
+          type: "service_unavailable",
+          code: 503
+        }
+      });
+
     }
+
 
     var finalResponse = null;
     var finalModel = null;
 
-    // Try models
-    for (var j = 0; j < candidateModels.length; j++) {
+
+    // ========================================================
+    // TRY MODELS IN PRIORITY ORDER
+    // ========================================================
+
+    for (
+      var j = 0;
+      j < candidateModels.length;
+      j++
+    ) {
 
       var modelToTry = candidateModels[j];
 
@@ -215,13 +337,22 @@ app.post("/v1/chat/completions", async function(req, res) {
         modelToTry
       );
 
+
+      // ======================================================
+      // BASE PAYLOAD
+      // ======================================================
+
       var payload = {
         model: modelToTry,
         messages: safeMessages,
         stream: false
       };
 
-      // Pass through frontend params
+
+      // ======================================================
+      // FRONTEND PASSTHROUGH PARAMETERS
+      // ======================================================
+
       var passthrough = [
         "temperature",
         "top_p",
@@ -232,22 +363,108 @@ app.post("/v1/chat/completions", async function(req, res) {
         "frequency_penalty",
         "repetition_penalty",
         "seed",
-        "stop"
+        "stop",
+        "response_format",
+        "tools",
+        "tool_choice"
       ];
 
-      for (var k = 0; k < passthrough.length; k++) {
+
+      for (
+        var k = 0;
+        k < passthrough.length;
+        k++
+      ) {
 
         var key = passthrough[k];
 
         if (body[key] !== undefined) {
           payload[key] = body[key];
         }
+
       }
 
-      // Safe default
-      if (payload.max_tokens === undefined) {
-        payload.max_tokens = 1250;
+
+      // ======================================================
+      // NVIDIA-SPECIFIC EXTRA BODY SUPPORT
+      // ======================================================
+      //
+      // If Janitor, Chub, or another frontend supplies
+      // extra_body, preserve it.
+      //
+      // This lets NVIDIA-specific parameters pass through
+      // without the proxy needing to know every possible
+      // future NVIDIA option.
+      //
+      // ======================================================
+
+      if (
+        body.extra_body &&
+        typeof body.extra_body === "object" &&
+        !Array.isArray(body.extra_body)
+      ) {
+
+        payload.extra_body = body.extra_body;
+
       }
+
+
+      // ======================================================
+      // SAFE DEFAULT TOKEN LIMIT
+      // ======================================================
+      //
+      // Frontend value ALWAYS takes priority.
+      //
+      // 4096 gives modern models considerably more room than
+      // the previous 1250-token limit while preventing an
+      // uncontrolled maximum.
+      //
+      // ======================================================
+
+      if (payload.max_tokens === undefined) {
+
+        payload.max_tokens = 4096;
+
+      }
+
+
+      // ======================================================
+      // RP DEFAULT: DISABLE REASONING WHERE APPROPRIATE
+      // ======================================================
+      //
+      // This prevents supported reasoning models from wasting
+      // output budget on unnecessary visible/internal thinking
+      // when used for character RP.
+      //
+      // If the frontend explicitly supplied an extra_body
+      // setting, that setting wins.
+      //
+      // ======================================================
+
+      if (
+        NON_THINKING_MODELS[modelToTry] &&
+        !(
+          body.extra_body &&
+          (
+            body.extra_body.enable_thinking !== undefined ||
+            body.extra_body.thinking !== undefined ||
+            body.extra_body.chat_template_kwargs !== undefined
+          )
+        )
+      ) {
+
+        if (!payload.extra_body) {
+          payload.extra_body = {};
+        }
+
+        payload.extra_body.enable_thinking = false;
+
+      }
+
+
+      // ======================================================
+      // SEND REQUEST TO NVIDIA
+      // ======================================================
 
       try {
 
@@ -263,6 +480,42 @@ app.post("/v1/chat/completions", async function(req, res) {
           }
         );
 
+
+        // ====================================================
+        // AUTHENTICATION FAILURE
+        // ====================================================
+        //
+        // There is no point hammering every model if the API
+        // key itself has expired or been rejected.
+        //
+        // ====================================================
+
+        if (
+          response.status === 401 ||
+          response.status === 403
+        ) {
+
+          console.error(
+            "NVIDIA API KEY REJECTED:",
+            "HTTP " + response.status
+          );
+
+          return res.status(response.status).json({
+            error: {
+              message:
+                "NVIDIA rejected the API key. Check or replace NIM_API_KEY / NVIDIA_API_KEY.",
+              type: "authentication_error",
+              code: response.status
+            }
+          });
+
+        }
+
+
+        // ====================================================
+        // MODEL FAILURE
+        // ====================================================
+
         if (response.status !== 200) {
 
           console.warn(
@@ -272,8 +525,27 @@ app.post("/v1/chat/completions", async function(req, res) {
             response.status
           );
 
+          if (
+            response.data &&
+            response.data.error &&
+            response.data.error.message
+          ) {
+
+            console.warn(
+              "NVIDIA error:",
+              response.data.error.message
+            );
+
+          }
+
           continue;
+
         }
+
+
+        // ====================================================
+        // VALIDATE RESPONSE
+        // ====================================================
 
         if (
           !response.data ||
@@ -287,7 +559,13 @@ app.post("/v1/chat/completions", async function(req, res) {
           );
 
           continue;
+
         }
+
+
+        // ====================================================
+        // SUCCESS
+        // ====================================================
 
         finalResponse = response.data;
         finalModel = modelToTry;
@@ -298,6 +576,7 @@ app.post("/v1/chat/completions", async function(req, res) {
         );
 
         break;
+
 
       } catch (err) {
 
@@ -315,42 +594,68 @@ app.post("/v1/chat/completions", async function(req, res) {
             modelToTry,
             err.message || err
           );
+
         }
+
       }
+
     }
 
-    // Total failure
+
+    // ========================================================
+    // TOTAL MODEL FAILURE
+    // ========================================================
+
     if (!finalResponse) {
 
-      return res.json({
-        id: "chatcmpl-" + Date.now(),
-        object: "chat.completion",
-        created: Math.floor(Date.now() / 1000),
-
-        model:
-          requestedModel || "unavailable",
-
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: "assistant",
-              content:
-                "[All NVIDIA models are currently unavailable. Please retry shortly.]"
-            },
-            finish_reason: "stop"
-          }
-        ],
-
-        usage: {
-          prompt_tokens: 0,
-          completion_tokens: 0,
-          total_tokens: 0
+      return res.status(503).json({
+        error: {
+          message:
+            "All configured NVIDIA models are currently unavailable. Please retry shortly.",
+          type: "service_unavailable",
+          code: 503
         }
       });
+
     }
 
-    // OpenAI-compatible response
+
+    // ========================================================
+    // OPENAI-COMPATIBLE RESPONSE
+    // ========================================================
+
+    var selectedChoice =
+      (
+        finalResponse &&
+        finalResponse.choices &&
+        finalResponse.choices[0]
+      )
+        ? finalResponse.choices[0]
+        : null;
+
+
+    var selectedMessage =
+      (
+        selectedChoice &&
+        selectedChoice.message
+      )
+        ? selectedChoice.message
+        : null;
+
+
+    var responseContent = "";
+
+    if (
+      selectedMessage &&
+      typeof selectedMessage.content === "string"
+    ) {
+
+      responseContent =
+        selectedMessage.content;
+
+    }
+
+
     return res.json({
 
       id:
@@ -366,32 +671,30 @@ app.post("/v1/chat/completions", async function(req, res) {
       model: finalModel,
 
       choices: [
-  {
-    index: 0,
-    message: {
-      role: "assistant",
-      content:
-        (
-          finalResponse &&
-          finalResponse.choices &&
-          finalResponse.choices[0] &&
-          finalResponse.choices[0].message &&
-          typeof finalResponse.choices[0].message.content === "string"
-        )
-          ? finalResponse.choices[0].message.content
-          : ""
-    },
-    finish_reason:
-      (
-        finalResponse &&
-        finalResponse.choices &&
-        finalResponse.choices[0] &&
-        finalResponse.choices[0].finish_reason
-      )
-        ? finalResponse.choices[0].finish_reason
-        : "stop"
-  }
-],
+        {
+          index: 0,
+
+          message: {
+            role:
+              (
+                selectedMessage &&
+                selectedMessage.role
+              )
+                ? selectedMessage.role
+                : "assistant",
+
+            content: responseContent
+          },
+
+          finish_reason:
+            (
+              selectedChoice &&
+              selectedChoice.finish_reason
+            )
+              ? selectedChoice.finish_reason
+              : "stop"
+        }
+      ],
 
       usage:
         finalResponse.usage || {
@@ -399,7 +702,9 @@ app.post("/v1/chat/completions", async function(req, res) {
           completion_tokens: 0,
           total_tokens: 0
         }
+
     });
+
 
   } catch (err) {
 
@@ -415,17 +720,28 @@ app.post("/v1/chat/completions", async function(req, res) {
           "Internal server error",
 
         type: "server_error",
+
         code: 500
       }
     });
+
   }
-});
-
-// Start server
-app.listen(PORT, "0.0.0.0", function() {
-
-  console.log(
-    "NVIDIA NIM Proxy running on port " + PORT
-  );
 
 });
+
+
+// ============================================================
+// START SERVER
+// ============================================================
+
+app.listen(
+  PORT,
+  "0.0.0.0",
+  function () {
+
+    console.log(
+      "NVIDIA NIM Proxy running on port " + PORT
+    );
+
+  }
+);
