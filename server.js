@@ -409,38 +409,7 @@ if (candidateModels.length === 0) {
       }
 
 
-      // ======================================================
-      // RP DEFAULT: DISABLE REASONING WHERE APPROPRIATE
-      // ======================================================
-      //
-      // This prevents supported reasoning models from wasting
-      // output budget on unnecessary visible/internal thinking
-      // when used for character RP.
-      //
-      // If the frontend explicitly supplied an extra_body
-      // setting, that setting wins.
-      //
-      // ======================================================
-
-      if (
-        NON_THINKING_MODELS[modelToTry] &&
-        !(
-          body.extra_body &&
-          (
-            body.extra_body.enable_thinking !== undefined ||
-            body.extra_body.thinking !== undefined ||
-            body.extra_body.chat_template_kwargs !== undefined
-          )
-        )
-      ) {
-
-        if (!payload.extra_body) {
-          payload.extra_body = {};
-        }
-
-        payload.extra_body.enable_thinking = false;
-
-      }
+      
 
 
       // ======================================================
