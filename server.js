@@ -255,43 +255,46 @@ app.post("/v1/chat/completions", async function (req, res) {
     }
 
 
-    // ========================================================
-    // BUILD MODEL CANDIDATE LIST
-    // ========================================================
+    // Build model list
+// Our RP priority list ALWAYS comes first.
+// Chub's requested model is only used as a final fallback.
 
-    var candidateModels = [];
+var candidateModels = [];
 
+// Primary RP priority list
+for (var i = 0; i < FALLBACK_MODELS.length; i++) {
 
-    // User/frontend requested model gets first priority
-    if (
-      requestedModel &&
-      availableModels[requestedModel]
-    ) {
+  var fallback = FALLBACK_MODELS[i];
 
-      candidateModels.push(requestedModel);
+  if (
+    availableModels[fallback] &&
+    candidateModels.indexOf(fallback) === -1
+  ) {
+    candidateModels.push(fallback);
+  }
+}
 
-    }
+// Only use Chub's requested model if none of our
+// preferred models are currently available.
+if (
+  requestedModel &&
+  availableModels[requestedModel] &&
+  candidateModels.indexOf(requestedModel) === -1
+) {
+  candidateModels.push(requestedModel);
+}
 
+// Emergency fallback
+if (candidateModels.length === 0) {
 
-    // Then use our RP-optimized priority list
-    for (
-      var i = 0;
-      i < FALLBACK_MODELS.length;
-      i++
-    ) {
-
-      var fallback = FALLBACK_MODELS[i];
-
-      if (
-        availableModels[fallback] &&
-        candidateModels.indexOf(fallback) === -1
-      ) {
-
-        candidateModels.push(fallback);
-
-      }
-
-    }
+  if (requestedModel) {
+    candidateModels.push(requestedModel);
+  } else {
+    candidateModels.push(
+      "meta/llama-3.3-70b-instruct"
+    );
+  }
+}
 
 
     // ========================================================
