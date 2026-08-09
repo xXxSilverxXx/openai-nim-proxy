@@ -388,29 +388,7 @@ if (candidateModels.length === 0) {
       }
 
 
-      // ======================================================
-      // NVIDIA-SPECIFIC EXTRA BODY SUPPORT
-      // ======================================================
-      //
-      // If Janitor, Chub, or another frontend supplies
-      // extra_body, preserve it.
-      //
-      // This lets NVIDIA-specific parameters pass through
-      // without the proxy needing to know every possible
-      // future NVIDIA option.
-      //
-      // ======================================================
-
-      if (
-        body.extra_body &&
-        typeof body.extra_body === "object" &&
-        !Array.isArray(body.extra_body)
-      ) {
-
-        payload.extra_body = body.extra_body;
-
-      }
-
+      
 
       // ======================================================
       // SAFE DEFAULT TOKEN LIMIT
