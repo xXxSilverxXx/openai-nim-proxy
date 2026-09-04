@@ -70,16 +70,11 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 // ============================================================
 
 var FALLBACK_MODELS = [
-  "z-ai/glm-5.2",
-  "minimaxai/minimax-m3",
-  "deepseek-ai/deepseek-v4-pro",
-  "deepseek-ai/deepseek-v4-flash",
-  "nvidia/nemotron-3-super-120b-a12b",
-  "nvidia/nemotron-3-ultra-550b-a55b",
-  "thinkingmachines/inkling",
-  "poolside/laguna-xs-2.1",
-  "nvidia/llama-3.3-nemotron-super-49b-v1.5",
-  "meta/llama-3.3-70b-instruct"
+  "deepseek-ai/deepseek-v4-pro-0813",
+  "deepseek-ai/deepseek-v4-flash-0731",
+  "moonshotai/kimi-k3",
+  "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "minimaxai/minimax-m3"
 ];
 
 
@@ -88,12 +83,10 @@ var FALLBACK_MODELS = [
 // ============================================================
 
 var NON_THINKING_MODELS = {
-  "deepseek-ai/deepseek-v4-pro": true,
-  "deepseek-ai/deepseek-v4-flash": true,
-  "nvidia/nemotron-3-super-120b-a12b": true,
-  "nvidia/nemotron-3-ultra-550b-a55b": true,
-  "moonshotai/kimi-k2.6": true,
-  "z-ai/glm-5.2": true,
+  "deepseek-ai/deepseek-v4-pro-0813": true,
+  "deepseek-ai/deepseek-v4-flash-0731": true,
+  "moonshotai/kimi-k3": true,
+  "nvidia/nemotron-3.5-lightning-30b-a3b": true,
   "minimaxai/minimax-m3": true
 };
 
