@@ -73,7 +73,6 @@ var FALLBACK_MODELS = [
   "deepseek-ai/deepseek-v4-pro-0813",
   "deepseek-ai/deepseek-v4-flash-0731",
   "moonshotai/kimi-k3",
-  "nvidia/nemotron-3.5-lightning-30b-a3b",
   "minimaxai/minimax-m3"
 ];
 
@@ -85,8 +84,7 @@ var FALLBACK_MODELS = [
 var NON_THINKING_MODELS = {
   "deepseek-ai/deepseek-v4-pro-0813": true,
   "deepseek-ai/deepseek-v4-flash-0731": true,
-  "moonshotai/kimi-k3": true,
-  "nvidia/nemotron-3.5-lightning-30b-a3b": true,
+  "moonshotai/kimi-k3": false,
   "minimaxai/minimax-m3": true
 };
 
@@ -418,7 +416,7 @@ if (candidateModels.length === 0) {
               Authorization: "Bearer " + NIM_API_KEY,
               "Content-Type": "application/json"
             },
-            timeout: 60000
+            timeout: 120000
           }
         );
 
