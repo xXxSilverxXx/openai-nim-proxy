@@ -70,7 +70,7 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 // ============================================================
 
 var FALLBACK_MODELS = [
-  "minimaxai/minimax-m3"
+  "meta/muse-glimmer-30b"
 ];
 
 
@@ -79,7 +79,7 @@ var FALLBACK_MODELS = [
 // ============================================================
 
 var NON_THINKING_MODELS = {
-  "minimaxai/minimax-m3": false
+  "meta/muse-glimmer-30b": false
 };
 
 
