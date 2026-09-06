@@ -69,18 +69,14 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 //
 // ============================================================
 
-var FALLBACK_MODELS = [
-  "google/gemma-4-31b-it"
-];
+var FALLBACK_MODELS = 
 
 
 // ============================================================
 // MODELS WHERE THINKING CAN BE DISABLED
 // ============================================================
 
-var NON_THINKING_MODELS = {
-  "google/gemma-4-31b-it": false
-};
+var NON_THINKING_MODELS = 
 
 
 // ============================================================
