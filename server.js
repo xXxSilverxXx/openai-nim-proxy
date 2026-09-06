@@ -69,6 +69,19 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 //
 // ============================================================
 
+var FALLBACK_MODELS = [
+  "meta/muse-glimmer-30b"
+];
+
+
+// ============================================================
+// MODELS WHERE THINKING CAN BE DISABLED
+// ============================================================
+
+var NON_THINKING_MODELS = {
+  "meta/muse-glimmer-30b": false
+};
+
 
 // ============================================================
 // REFRESH NVIDIA MODEL CACHE
