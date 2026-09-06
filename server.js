@@ -70,7 +70,7 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 // ============================================================
 
 var FALLBACK_MODELS = [
-  "nvidia/nemotron-3-ultra-550b-a55b"
+  "minimaxai/minimax-m3"
 ];
 
 
@@ -79,7 +79,7 @@ var FALLBACK_MODELS = [
 // ============================================================
 
 var NON_THINKING_MODELS = {
-  "nvidia/nemotron-3-ultra-550b-a55b": false
+  "minimaxai/minimax-m3": false
 };
 
 
