@@ -410,7 +410,7 @@ if (candidateModels.length === 0) {
               Authorization: "Bearer " + NIM_API_KEY,
               "Content-Type": "application/json"
             },
-            timeout: 120000
+            timeout: 240000
           }
         );
 
