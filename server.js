@@ -70,7 +70,7 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 // ============================================================
 
 var FALLBACK_MODELS = [
-  "minimaxai/minimax-m3"
+  "deepseek-ai/deepseek-v4-flash-0731"
 ];
 
 
@@ -79,7 +79,7 @@ var FALLBACK_MODELS = [
 // ============================================================
 
 var NON_THINKING_MODELS = {
-  "minimaxai/minimax-m3": false
+  "deepseek-ai/deepseek-v4-flash-0731": false
 };
 
 
