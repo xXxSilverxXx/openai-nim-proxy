@@ -70,7 +70,7 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 // ============================================================
 
 var FALLBACK_MODELS = [
-  "meta/muse-glimmer-30b"
+  "z-ai/glm-5.3-flash"
 ];
 
 
@@ -79,7 +79,7 @@ var FALLBACK_MODELS = [
 // ============================================================
 
 var NON_THINKING_MODELS = {
-  "meta/muse-glimmer-30b": false
+  "z-ai/glm-5.3-flash": false
 };
 
 
