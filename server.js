@@ -70,7 +70,7 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 // ============================================================
 
 var FALLBACK_MODELS = [
-  "google/gemma-4-31b-it"
+  "openai/gpt-oss-20b"
 ];
 
 
@@ -79,7 +79,7 @@ var FALLBACK_MODELS = [
 // ============================================================
 
 var NON_THINKING_MODELS = {
-  "google/gemma-4-31b-it": false
+  "openai/gpt-oss-20b": false
 };
 
 
