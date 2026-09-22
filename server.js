@@ -70,7 +70,7 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 // ============================================================
 
 var FALLBACK_MODELS = [
-  "nvidia/nemotron-nano-3-30b-a3b"
+  "deepseek-ai/deepseek-v4.1-flash"
 ];
 
 
@@ -79,7 +79,7 @@ var FALLBACK_MODELS = [
 // ============================================================
 
 var NON_THINKING_MODELS = {
-  "nvidia/nemotron-nano-3-30b-a3b": false
+  "deepseek-ai/deepseek-v4.1-flash": false
 };
 
 
