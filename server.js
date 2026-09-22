@@ -70,7 +70,7 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 // ============================================================
 
 var FALLBACK_MODELS = [
-  "z-ai/glm-5.3-flash"
+  "google/gemma-4-31b-it"
 ];
 
 
@@ -79,7 +79,7 @@ var FALLBACK_MODELS = [
 // ============================================================
 
 var NON_THINKING_MODELS = {
-  "z-ai/glm-5.3-flash": false
+  "google/gemma-4-31b-it": false
 };
 
 
