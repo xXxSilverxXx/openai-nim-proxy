@@ -70,7 +70,7 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 // ============================================================
 
 var FALLBACK_MODELS = [
-  "openai/gpt-oss-20b"
+  "nvidia/nemotron-nano-3-30b-a3b"
 ];
 
 
@@ -79,7 +79,7 @@ var FALLBACK_MODELS = [
 // ============================================================
 
 var NON_THINKING_MODELS = {
-  "openai/gpt-oss-20b": false
+  "nvidia/nemotron-nano-3-30b-a3b": false
 };
 
 
