@@ -70,6 +70,7 @@ var MODEL_CACHE_MS = 10 * 60 * 1000;
 // ============================================================
 
 var FALLBACK_MODELS = [
+  "google/gemma-4-31b-it"
   "deepseek-ai/deepseek-v4.1-flash"
 ];
 
@@ -79,6 +80,7 @@ var FALLBACK_MODELS = [
 // ============================================================
 
 var NON_THINKING_MODELS = {
+  "google/gemma-4-31b-it": false
   "deepseek-ai/deepseek-v4.1-flash": false
 };
 
