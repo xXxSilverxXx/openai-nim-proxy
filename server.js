@@ -105,7 +105,7 @@ const MODEL_PROFILES = Object.freeze({
   }
 });
 
-const DEFAULT_ACTIVE_MODEL = "mistralai/mistral-large-4-1t-a52b";
+const DEFAULT_ACTIVE_MODEL = "minimaxai/minimax-m3.1-flash";
 const ACTIVE_MODEL = (process.env.ACTIVE_MODEL || DEFAULT_ACTIVE_MODEL).trim();
 const ACTIVE_PROFILE = Object.prototype.hasOwnProperty.call(MODEL_PROFILES, ACTIVE_MODEL)
   ? MODEL_PROFILES[ACTIVE_MODEL]
