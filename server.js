@@ -321,9 +321,18 @@ app.post("/v1/chat/completions", async (req, res) => {
   }
 
   if (upstream.status !== 200) {
-    const remoteMessage = upstream.data?.error?.message || upstream.data?.message;
-    console.error("NVIDIA refused", ACTIVE_MODEL, "HTTP", upstream.status,
-      typeof remoteMessage === "string" ? remoteMessage.slice(0, 500) : "");
+    const remoteMessage =
+  upstream.data?.error?.message ||
+  upstream.data?.detail ||
+  upstream.data?.message ||
+  (typeof upstream.data === "string" ? upstream.data : "");
+
+console.error(
+  "NVIDIA refused:",
+  ACTIVE_MODEL,
+  "HTTP:", upstream.status,
+  "DETAILS:", String(remoteMessage).slice(0, 800) || "(no details)"
+);
 
     if (upstream.status === 401 || upstream.status === 403) {
       return apiError(res, upstream.status,
