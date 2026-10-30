@@ -40,11 +40,14 @@ const NIM_API_KEY = process.env.NIM_API_KEY || process.env.NVIDIA_API_KEY;
 
 const MODEL_PROFILES = Object.freeze({
   // START HERE: strong, straightforward non-reasoning RP candidate.
-  "mistralai/mistral-large-4-1t-a52b": {
-  maxTokens: 4096,
-  temperature: 0.7,
-  advanced: ["frequency_penalty", "presence_penalty", "tools", "tool_choice"]
-},
+  "minimaxai/minimax-m3.1-flash": {
+    maxTokens: 6144,
+    temperature: 1.0,
+    topP: 0.95,
+    // Reasoning controls on this endpoint may depend on its serving recipe.
+    // Don't inject unverified flags that could cause HTTP 400/422.
+    advanced: ["tools", "tool_choice"]
+  },
 
   // RESERVE OPTIONS: never used unless explicitly selected.
   "z-ai/glm-5.3-flash": {
