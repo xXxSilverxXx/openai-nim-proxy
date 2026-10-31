@@ -94,11 +94,16 @@ const MODEL_PROFILES = Object.freeze({
     temperature: 0.7
   },
   "stepfun-ai/step-5-preview": {
-    maxTokens: 6144,
-    temperature: 0.7,
-    // NVIDIA says Step 5 reasoning cannot be turned off.
-    advanced: ["frequency_penalty", "presence_penalty", "tools", "tool_choice"]
-  },
+  maxTokens: 4096,
+  temperature: 0.5,
+  topP: 1,
+  advanced: [
+    "frequency_penalty",
+    "presence_penalty",
+    "tools",
+    "tool_choice"
+  ]
+},
   "deepseek-ai/deepseek-v4.1-flash": {
     maxTokens: 4096,
     temperature: 0.7
