@@ -385,8 +385,10 @@ function buildPayload(body, streaming) {
     }
   }
 
-  const clientTokens =
-    body.max_tokens ?? body.max_completion_tokens;
+  // Some frontends send token counts as strings or floats.
+  const clientTokens = Math.floor(
+    Number(body.max_tokens ?? body.max_completion_tokens)
+  );
 
   if (
     Number.isInteger(clientTokens) &&
@@ -444,6 +446,10 @@ function validateChatRequest(body) {
       return "Each message must have a valid role.";
     }
   }
+
+  // Be permissive: some frontends send "true"/"false" strings or null.
+  if (body.stream === "true") body.stream = true;
+  if (body.stream === "false" || body.stream === null) body.stream = false;
 
   if (
     body.stream !== undefined &&
@@ -690,7 +696,9 @@ app.get("/health/upstream", async (req, res) => {
     upstreamHealthCache &&
     Date.now() - upstreamHealthCheckedAt < HEALTH_CACHE_TTL_MS
   ) {
-    return res.json({
+    return res.status(
+      upstreamHealthCache.status === "reachable" ? 200 : 502
+    ).json({
       ...upstreamHealthCache,
       cached: true
     });
@@ -1220,13 +1228,11 @@ app.post("/v1/chat/completions", async (req, res) => {
           ? "stream"
           : "json",
 
-        signal: controller.signal,
+        signal: controller.signal
 
-        // Do not transparently decompress/transform SSE data.
-        // Axios stream passthrough preserves the upstream event bytes.
-        ...(streaming
-          ? { decompress: false }
-          : {})
+        // Axios must decompress: if NVIDIA gzips the SSE body and we
+        // pipe raw bytes without a Content-Encoding header, clients
+        // receive garbage.
       }
     );
 
