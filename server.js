@@ -191,7 +191,7 @@ const MODEL_PROFILES = Object.freeze({
 
 });
 
-const DEFAULT_ACTIVE_MODEL = "stepfun-ai/step-5-preview";
+const DEFAULT_ACTIVE_MODEL = "moonshotai/kimi-k2.6";
 
 const ACTIVE_MODEL = (
   process.env.ACTIVE_MODEL || DEFAULT_ACTIVE_MODEL
