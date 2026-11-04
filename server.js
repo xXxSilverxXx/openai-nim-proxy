@@ -191,7 +191,7 @@ const MODEL_PROFILES = Object.freeze({
 
 });
 
-const DEFAULT_ACTIVE_MODEL = "nvidia/nemotron-3-ultra-550b-a55b";
+const DEFAULT_ACTIVE_MODEL = "minimaxai/minimax-m3.1-flash";
 
 const ACTIVE_MODEL = (
   process.env.ACTIVE_MODEL || DEFAULT_ACTIVE_MODEL
