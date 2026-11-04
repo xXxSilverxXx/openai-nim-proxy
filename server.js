@@ -191,7 +191,7 @@ const MODEL_PROFILES = Object.freeze({
 
 });
 
-const DEFAULT_ACTIVE_MODEL = "writer/palmyra-creative-122b";
+const DEFAULT_ACTIVE_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b";
 
 const ACTIVE_MODEL = (
   process.env.ACTIVE_MODEL || DEFAULT_ACTIVE_MODEL
